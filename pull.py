@@ -418,7 +418,7 @@ class YoudaoNoteSession(requests.Session):
                             child2.text = ''
                         new_content += f'%s{nl}{nl}' % child2.text
                         break
-
+            # 图片
             elif 'image' in child.tag:
                 if flag == 0:
                     self.print_ydnote_file_name(file_path)
@@ -437,7 +437,7 @@ class YoudaoNoteSession(requests.Session):
                             image_name = ''
                         new_content += f'![%s](%s){nl}{nl}' % (image_name, image_url)
                         break
-
+            # 代码
             elif 'code' in child.tag:
                 for child2 in child:
                     # text 在 language 前
@@ -449,7 +449,7 @@ class YoudaoNoteSession(requests.Session):
                             language = ''
                         new_content += f'```%s{nl}%s{nl}```{nl}{nl}' % (language, code)
                         break
-            
+            # 列表
             elif 'list-item' in child.tag:
                 # logging.info('list-item child: %s' % child)
 
@@ -488,12 +488,36 @@ class YoudaoNoteSession(requests.Session):
                         if text is None:
                             text = ''
                         new_content += f'> %s{nl}{nl}' % text
-
+            # 表格
             elif 'table' in child.tag:
                 for child2 in child:
                     if 'content' in child2.tag:
-                        new_content += f'```{nl}原来格式为表格（table），转换较复杂，未转换，需要手动复制一下{nl}%s{nl}```{nl}{nl}' % child2.text
-
+                        jsonObj = json.loads(child2.text)
+                        if jsonObj is None:
+                            jsonObj = ''
+                            new_content += f'> %s{nl}{nl}' % jsonObj
+                        else:
+                            row = len(jsonObj['heights'])  # 行
+                            col = len(jsonObj['widths'])  # 列
+                            for i in range(0, row * col):
+                                text = jsonObj['cells'][i].get('value')
+                                if text is None:
+                                    text = ' '
+                                else:
+                                    text = text.replace('\n',' ')
+                                if i % col == 0:
+                                    new_content += '| %s |' % text
+                                else:
+                                    new_content += ' %s |' % text
+                                if i == col - 1:
+                                    for j in range(0, col):
+                                        if j == 0:
+                                            new_content += '\r\n| ---- |'
+                                        else:
+                                            new_content += ' ---- |'
+                                if (i + 1) % col == 0:
+                                    new_content += '\r\n'
+            # 其他
             else:
                 for child2 in child:
                     if 'text' in child2.tag:
@@ -553,13 +577,13 @@ class YoudaoNoteSession(requests.Session):
             self.print_download_yd_image_error(url)
             return url
 
-        # 默认下载图片到 youdaonote-images 文件夹
-        image_dirname = 'youdaonote-images'
+        # 默认下载图片到 assets 文件夹
+        image_dirname = 'assets'
         local_image_dir = os.path.join(self.local_dir, image_dirname)
         if not os.path.exists(local_image_dir):
             os.mkdir(local_image_dir)
-        image_basename = os.path.basename(urlparse(url).path)
-        image_name = image_basename + '.' + response.headers['Content-Type'].split('/')[1]
+        image_basename = os.path.basename(urlparse(url).path).replace('\\', '/')
+        image_name = image_basename + '.' + response.headers['Content-Type'].split('/')[1].replace(';', '')
         local_image_path = os.path.join(local_image_dir, image_name)
 
         try:
@@ -576,7 +600,7 @@ class YoudaoNoteSession(requests.Session):
     def set_relative_image_path(self, file_path, image_name, image_dirname):
         """ 图片设置为相对地址 """
 
-        relative_path = file_path.replace(self.local_dir, '')
+        relative_path = file_path.replace(self.local_dir, '').replace('\\', '/')
         logging.info('relative_path: %s', relative_path)
         layer_count = len(relative_path.split('/'))
         if layer_count == 2:
